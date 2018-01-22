@@ -35,7 +35,7 @@ def calculate_and_save_values(Msamp,Esamp,spin,num_analysis,index,temp,data_file
 
     except:
         logging.error("Temp="+str(temp)+": Statistical Calculation Failed. No Data Written.")
-        return False
+        sys.exit()
 
 #simulation options (enter python main.py --help for details)
 @click.command()
@@ -131,11 +131,9 @@ def plot_graphs(temp_arr,M_mean_arr,M_std_arr,E_mean_arr,E_std_arr): #plot graph
 def check_step_values(num_steps,num_analysis,num_burnin): #simulation size checks and exceptions
     if (num_burnin > num_steps):
         raise ValueError('num_burning cannot be greater than available num_steps. Exiting simulation.')
-        sys.exit()
 
     if (num_analysis > num_steps - num_burnin):
         raise ValueError('num_analysis cannot be greater than available num_steps after burnin. Exiting simulation.')
-        sys.exit()
 
 def get_filenames(dirname): #make data folder if doesn't exist, then specify filename
     try:
@@ -147,7 +145,6 @@ def get_filenames(dirname): #make data folder if doesn't exist, then specify fil
         return data_filename, corr_filename
     except:
         raise ValueError('Directory name not valid. Exiting simulation.')
-        sys.exit()
 
 def write_sim_parameters(data_filename,corr_filename,n,num_steps,num_analysis,num_burnin,j,b,flip_prop):
     try:
@@ -170,18 +167,16 @@ def write_sim_parameters(data_filename,corr_filename,n,num_steps,num_analysis,nu
 def get_temp_array(t_min,t_max,t_step):
     if (t_min > t_max):
         raise ValueError('T_min cannot be greater than T_max. Exiting Simulation')
-        sys.exit()
     try:
         T = np.arange(t_min,t_max,t_step).tolist()
         return T
     except:
         raise ValueError('Error creating temperature array. Exiting simulation.')
-        sys.exit()
 
 def compute_autocorrelation(spin):
     n = len(spin)
     corr_array = []
-    for k in range(1,n/2):
+    for k in range(1,int(n/2)):
         col_mean, row_mean = spin.mean(axis=0),spin.mean(axis=1)
         #compute r values for rows and cols
         r_col = [np.multiply(spin[j,:]-col_mean,spin[(j+k)%n,:]-col_mean) for j in range(1,n)]
