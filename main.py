@@ -39,14 +39,14 @@ def calculate_and_save_values(Msamp,Esamp,spin,num_analysis,index,temp,data_file
 
 #simulation options (enter python main.py --help for details)
 @click.command()
-@click.option('--t_min', default=2.0, prompt='Minimum Temp', help='Minimum Temperature (inclusive)', type=float)
-@click.option('--t_max', default=2.6, prompt='Maximum Temp', help='Maximum Temperature (inclusive)', type=float)
-@click.option('--t_step', default=0.1, prompt='Temp Step Size', help='Temperature Step Size', type=float)
+@click.option('--t_min', default=2.0, help='Minimum Temperature (inclusive)', type=float)
+@click.option('--t_max', default=2.6, help='Maximum Temperature (inclusive)', type=float)
+@click.option('--t_step', default=0.1, help='Temperature Step Size', type=float)
 
-@click.option('--n', prompt='Lattice Size', help='Lattice Size (NxN)',type=int)
+@click.option('--n', default=15, help='Lattice Size (NxN)',type=int)
 @click.option('--num_steps', default=100000, help='Total Number of Steps',type=int)
 @click.option('--num_analysis', default=50000, help='Number of Steps used in Analysis',type=int)
-@click.option('--num_burnin', default=0, help='Total Number of Burnin Steps',type=int)
+@click.option('--num_burnin', default=10000, help='Total Number of Burnin Steps',type=int)
 
 @click.option('--j', default=1.0, help='Interaction Strength',type=float)
 @click.option('--b', default=0.0, help='Applied Magnetic Field',type=float)
