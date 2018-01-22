@@ -9,17 +9,23 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm #fancy progress bar generator
 from ising import run_ising #import run_ising function from ising.py
 
-def calculate_and_save_values(Msamp,Esamp,spin,num_analysis,index,temp,data_filename,corr_filename):
+def calculate_and_save_values(Msamp, Esamp, spin, num_analysis, index, temp, data_filename, corr_filename):
     try:
         #calculate statistical values
-        M_mean = np.average(Msamp[-num_analysis:])
-        E_mean = np.average(Esamp[-num_analysis:])
-        M_std = np.std(Msamp[-num_analysis:])
-        E_std = np.std(Esamp[-num_analysis:])
-        data_array = [M_mean,M_std,E_mean,E_std]
+        Msamp_analysis = Msamp[-num_analysis:]
+        Esamp_analysis = Esamp[-num_analysis:]
+        Msamp_analysis_sq = np.square(Msamp_analysis)
+        Esamp_analysis_sq = np.square(Esamp_analysis)
+        M_mean = np.average(Msamp_analysis)
+        E_mean = np.average(Esamp_analysis)
+        c_v = 1.0/temp*(np.average(Esamp_analysis_sq)-E_mean**2)
+        chi = np.average(Msamp_analysis_sq)-M_mean**2
+        M_std = np.std(Msamp_analysis)
+        E_std = np.std(Esamp_analysis)
+        data_array = [M_mean,M_std,E_mean,E_std,c_v,chi]
 
         #write data to CSV file
-        header_array = ['Temperature','Magnetizatio n Mean','Magnetization Std Dev','Energy Mean','Energy Std Dev']
+        header_array = ['Temperature','Magnetization Mean','Magnetization Std Dev','Energy Mean','Energy Std Dev',"Heat Capacity","Susceptibility"]
         append_data_to_file(data_filename, header_array) if index == 0 else None
         append_data_to_file(data_filename, data_array, temp)
 
@@ -34,7 +40,7 @@ def calculate_and_save_values(Msamp,Esamp,spin,num_analysis,index,temp,data_file
         return True
 
     except:
-        logging.error("Temp="+str(temp)+": Statistical Calculation Failed. No Data Written.")
+        logging.error("Temp=" + str(temp) + ": Statistical Calculation Failed. No Data Written.")
         sys.exit()
 
 #simulation options (enter python main.py --help for details)
@@ -46,7 +52,7 @@ def calculate_and_save_values(Msamp,Esamp,spin,num_analysis,index,temp,data_file
 @click.option('--n', default=15, help='Lattice Size (NxN)',type=int)
 @click.option('--num_steps', default=100000, help='Total Number of Steps',type=int)
 @click.option('--num_analysis', default=50000, help='Number of Steps used in Analysis',type=int)
-@click.option('--num_burnin', default=10000, help='Total Number of Burnin Steps',type=int)
+@click.option('--num_burnin', default=0, help='Total Number of Burnin Steps',type=int)
 
 @click.option('--j', default=1.0, help='Interaction Strength',type=float)
 @click.option('--b', default=0.0, help='Applied Magnetic Field',type=float)
