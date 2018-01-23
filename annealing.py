@@ -1,10 +1,11 @@
-def T_anneal(T, ii, num_steps, num_burnin):
+import numpy as np
 
-    #implement annealing code here
-
-    T_a = T;
-
-    return float(T_a)
+def T_anneal(T, t_anneal, alpha, step, num_burnin):
+    if step < num_burnin:
+        T_a = t_anneal*np.power(alpha,step)
+    else:
+        T_a = T
+    return T_a
 
 def B_anneal(B, ii, num_steps, num_burnin):
 

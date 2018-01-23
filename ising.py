@@ -7,7 +7,7 @@ try:
 except:
     from tqdm import tqdm
 
-def run_ising(N,T,num_steps,num_burnin,flip_prop,J,B):
+def run_ising(N,T,num_steps,num_burnin,flip_prop,J,B,t_anneal,anneal_boolean):
 
     # Description of parameters:
     # N = Grid Size
@@ -27,7 +27,8 @@ def run_ising(N,T,num_steps,num_burnin,flip_prop,J,B):
     # We obtain the sum of nearest neighbors by convoluting
     #   this matrix with the spin matrix
     conv_mat = np.matrix('0 1 0; 1 0 1; 0 1 0')
-
+    alpha = np.exp(np.log(T/t_anneal)/num_burnin)
+    print(alpha)
     # Generate a random initial configuration
     spin = np.random.choice([-1,1],(N,N))
 
@@ -47,8 +48,12 @@ def run_ising(N,T,num_steps,num_burnin,flip_prop,J,B):
             steps.refresh() # to show immediately the update
 
         #implement annealing in annealing.py file
-        T_step = T_anneal(T, step, num_steps, num_burnin)
-        B_step = B_anneal(B, step, num_steps, num_burnin)
+        if anneal_boolean:
+            T_step = T_anneal(T, t_anneal, alpha, step, num_burnin)
+            B_step = B_anneal(B, step, num_steps, num_burnin)
+        else:
+            T_step = T
+            B_step = B
 
         #Calculating the total spin of neighbouring cells
         neighbors = signal.convolve2d(spin,conv_mat,mode='same',boundary='wrap')
