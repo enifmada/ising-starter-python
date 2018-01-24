@@ -45,14 +45,14 @@ def calculate_and_save_values(Msamp, Esamp, spin, num_analysis, index, temp, dat
 
 #simulation options (enter python main.py --help for details)
 @click.command()
-@click.option('--t_min', default=5, help='Minimum Temperature (inclusive)', type=float)
-@click.option('--t_max', default=6, help='Maximum Temperature (inclusive)', type=float)
-@click.option('--t_step', default=0.1, help='Temperature Step Size', type=float)
+@click.option('--t_min', default=2, help='Minimum Temperature (inclusive)', type=float)
+@click.option('--t_max', default=2.3, help='Maximum Temperature (inclusive)', type=float)
+@click.option('--t_step', default=0.02, help='Temperature Step Size', type=float)
 @click.option('--t_anneal', default=20.0, help="Starting Annealing Temperature", type=float)
 @click.option("--anneal_boolean", default=True, help="Anneal or not?", type=bool)
 #anneal_boolean should always be true unless testing stuff related to annealing
 
-@click.option('--n', default=15, help='Lattice Size (NxN)',type=int)
+@click.option('--n', default=25, help='Lattice Size (NxN)',type=int)
 @click.option('--num_steps', default=65000, help='Total Number of Steps',type=int)
 @click.option('--num_analysis', default=50000, help='Number of Steps used in Analysis',type=int)
 @click.option('--num_burnin', default=1500, help='Total Number of Burnin Steps',type=int)
