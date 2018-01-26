@@ -29,16 +29,12 @@ class AnalysisMW(QMainWindow):
 		self.hasstdev = []
 		self.variables = []
 		self.data = []
+		self.valuespertemp = 0
 		self.graph = pg.PlotWidget(title="Plot")
 		self.plot = self.graph.plot(x=[1,0],y=[0,1],pen=None, symbol="o")
 
 		self.headerlayout = QHBoxLayout()
 
-		buttoncontainerlayout = QHBoxLayout()
-		buttoncontainerlayout.addWidget(QLabel("Plot temperature vs..."))
-		self.buttonlayout = QHBoxLayout()
-		buttoncontainerlayout.addLayout(self.buttonlayout)
-		buttoncontainerlayout.addStretch(1)
 
 		filebutton = QPushButton("Choose File")
 		filebutton.clicked.connect(self.chooseFile)
@@ -49,32 +45,57 @@ class AnalysisMW(QMainWindow):
 		filelayout.addWidget(self.fileloc)
 		filelayout.addWidget(filebutton)
 
-		wholelayout = QVBoxLayout()
-		wholelayout.addLayout(self.headerlayout)
-		wholelayout.addLayout(filelayout)
-		wholelayout.addLayout(buttoncontainerlayout)
-		wholelayout.addWidget(self.graph)
+		self.choicecontainerlayout = QHBoxLayout()
 
-		analysis.setLayout(wholelayout)
+		self.wholelayout = QVBoxLayout()
+		self.wholelayout.addLayout(self.headerlayout)
+		self.wholelayout.addLayout(filelayout)
+		self.wholelayout.addLayout(self.choicecontainerlayout)
+		self.wholelayout.addWidget(self.graph)
+
+		analysis.setLayout(self.wholelayout)
 
 		self.setGeometry(500, 180, 400, 400)
 		self.setWindowTitle("Analysis")
 		self.show()
 
 	def generateButtons(self, names):
-		self.clearObject(self.buttonlayout)
+		self.clearObject(self.choicecontainerlayout)
+		self.choicecontainerlayout.addWidget(QLabel("Plot temperature vs..."))
+		buttonlayout = QHBoxLayout()
+		self.choicecontainerlayout.addLayout(buttonlayout)
+		self.choicecontainerlayout.addStretch(1)
 		self.buttonlist = []
 		for name in names:
 			index = names.index(name)
 			tempbutton = QPushButton(name)
 			tempbutton.clicked.connect(self.graphData)
 			self.buttonlist.append(tempbutton)
-			self.buttonlayout.addWidget(tempbutton)
+			buttonlayout.addWidget(tempbutton)
 			if index + 1 < len(names) and names[index+1][-7:] == "Std Dev":
 				self.hasstdev.append(True)
 				names.pop(index+1)
 			else:
 				self.hasstdev.append(False)
+
+	def generateCorrComboBox(self):
+		self.clearObject(self.choicecontainerlayout)
+		spacing = self.data[self.valuespertemp,0]-self.data[0,0]
+		corrcombobox = QComboBox()
+		temp = self.data[0,0]
+		while temp <= self.data[-1,0]:
+			corrcombobox.addItem(str(temp))
+			temp = temp + spacing
+		corrcombobox.activated.connect(lambda: self.graphCorrData(corrcombobox.currentIndex()))
+		self.choicecontainerlayout.addWidget(QLabel("Plot spatial correlation vs. distance at T = "))
+		self.choicecontainerlayout.addWidget(corrcombobox)
+		self.choicecontainerlayout.addStretch(1)
+
+		#mintemp = data[0,0]
+		#maxtemp = data[-1,0]
+		#corrdatadict = {}
+		#for i in range(int(data.shape[0]/valuespertemp)):
+			#corrdatadict[data[i*valuespertemp,0]] = data[i*valuespertemp:2*i*valuespertemp,1:]
 
 	def generateHeader(self, parameters, values):
 		self.clearObject(self.headerlayout)
@@ -93,13 +114,24 @@ class AnalysisMW(QMainWindow):
 
 		if filename[0]:
 			self.fileloc.setText(filename[0])
-			self.parameternames = np.genfromtxt(filename[0], delimiter=",", max_rows=1, dtype=str)
-			self.parametervalues = np.genfromtxt(filename[0], delimiter=",", skip_header=1, max_rows=1)
-			self.variables = np.genfromtxt(filename[0], delimiter=",", skip_header=3, max_rows=1, dtype=str)
-			self.data = np.genfromtxt(filename[0], delimiter=",", skip_header=4)
-			self.generateHeader(self.parameternames.tolist(), self.parametervalues.tolist())
-			self.generateButtons(self.variables[1:].tolist())
-			#print(data[:, 0]) gives temperatures
+			file = os.path.basename(filename[0])
+			if file[:4] != "data" and file[:4] != "corr":
+				print("Invalid file name!")
+			else:
+				self.parameternames = np.genfromtxt(filename[0], delimiter=",", max_rows=1, dtype=str)
+				self.parametervalues = np.genfromtxt(filename[0], delimiter=",", skip_header=1, max_rows=1)
+				self.data = np.genfromtxt(filename[0], delimiter=",", skip_header=4)
+				self.generateHeader(self.parameternames.tolist(), self.parametervalues.tolist())
+				self.graph.clear()
+				self.graph.setTitle(None)
+				if file[:4] == "data":
+					self.variables = np.genfromtxt(filename[0], delimiter=",", skip_header=3, max_rows=1, dtype=str)
+					self.generateButtons(self.variables[1:].tolist())
+					# data[:, 0]) gives temperatures
+				else:
+					sizeindex = self.parameternames.tolist().index("Lattice Size (NxN)")
+					self.valuespertemp = int(self.parametervalues[sizeindex]/2-1)
+					self.generateCorrComboBox()
 
 	def graphData(self, sender):
 		buttontext = self.sender().text()
@@ -117,6 +149,11 @@ class AnalysisMW(QMainWindow):
 		self.graph.setLabel("left", buttontext)
 		self.graph.setLabel("bottom", "Temperature")
 
+	def graphCorrData(self, index):
+		dataloc = index*self.valuespertemp
+		self.graph.setTitle("Spatial correlation vs. distance at T = {}".format(str(self.data[dataloc,0])))
+		self.graph.clear()
+		self.plot = self.graph.plot(x=self.data[dataloc:dataloc+self.valuespertemp,1], y=self.data[dataloc:dataloc+self.valuespertemp,2], pen=None, symbol="o")
 
 #a = np.genfromtxt(os.path.join(os.getcwd(), "data\corr_20180123-034342.csv"), delimiter=",", skip_header=4)
 #print(a)

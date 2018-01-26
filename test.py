@@ -2,4 +2,4 @@
 #pyqtgraph.examples.run()
 
 a = "string"
-print(a[-7:])
+print(a[:3])
