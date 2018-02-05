@@ -4,9 +4,18 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 import sys
 import pyqtgraph as pg
+import scipy.optimize
 
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
+
+
+def hc_func_below(x, tc, alpha):
+	return np.power(((tc - x) / tc), alpha)
+
+
+def hc_func_above(x, tc, beta, const):
+	return np.exp(const)*np.power(((x - tc) / tc), beta)
 
 class ParamBox(QWidget):
 	def __init__(self, parameter, value):
@@ -25,13 +34,20 @@ class AnalysisMW(QMainWindow):
 		analysis = QWidget()
 		self.setCentralWidget(analysis)
 
+		self.mode = None
 		self.buttonlist = []
 		self.hasstdev = []
 		self.variables = []
 		self.data = []
 		self.valuespertemp = 0
-		self.graph = pg.PlotWidget(title="Plot")
+		self.graph = pg.PlotWidget(title=None)
+		self.graph.data = None
 		self.plot = self.graph.plot(x=[1,0],y=[0,1],pen=None, symbol="o")
+
+		self.funcdict={}
+
+		self.analysisbutton = QPushButton("Fit Data")
+		self.analysisbutton.clicked.connect(self.analyzeCurrentData)
 
 		self.headerlayout = QHBoxLayout()
 
@@ -45,12 +61,16 @@ class AnalysisMW(QMainWindow):
 		filelayout.addWidget(self.fileloc)
 		filelayout.addWidget(filebutton)
 
+		self.choiceanalysislayout = QHBoxLayout()
 		self.choicecontainerlayout = QHBoxLayout()
+		self.choiceanalysislayout.addLayout(self.choicecontainerlayout)
+		self.choiceanalysislayout.addWidget(self.analysisbutton)
+		self.choiceanalysislayout.addStretch(1)
 
 		self.wholelayout = QVBoxLayout()
 		self.wholelayout.addLayout(self.headerlayout)
 		self.wholelayout.addLayout(filelayout)
-		self.wholelayout.addLayout(self.choicecontainerlayout)
+		self.wholelayout.addLayout(self.choiceanalysislayout)
 		self.wholelayout.addWidget(self.graph)
 
 		analysis.setLayout(self.wholelayout)
@@ -60,26 +80,24 @@ class AnalysisMW(QMainWindow):
 		self.show()
 
 	def generateButtons(self, names):
-		self.clearObject(self.choicecontainerlayout)
+		self.clearLayout(self.choicecontainerlayout)
 		self.choicecontainerlayout.addWidget(QLabel("Plot temperature vs..."))
-		buttonlayout = QHBoxLayout()
-		self.choicecontainerlayout.addLayout(buttonlayout)
-		self.choicecontainerlayout.addStretch(1)
 		self.buttonlist = []
 		for name in names:
 			index = names.index(name)
 			tempbutton = QPushButton(name)
 			tempbutton.clicked.connect(self.graphData)
-			self.buttonlist.append(tempbutton)
-			buttonlayout.addWidget(tempbutton)
+			self.buttonlist.append(name)
+			self.choicecontainerlayout.addWidget(tempbutton)
 			if index + 1 < len(names) and names[index+1][-7:] == "Std Dev":
 				self.hasstdev.append(True)
 				names.pop(index+1)
 			else:
 				self.hasstdev.append(False)
+		self.choicecontainerlayout.addStretch(1)
 
 	def generateCorrComboBox(self):
-		self.clearObject(self.choicecontainerlayout)
+		self.clearLayout(self.choicecontainerlayout)
 		spacing = self.data[self.valuespertemp,0]-self.data[0,0]
 		corrcombobox = QComboBox()
 		temp = self.data[0,0]
@@ -98,16 +116,18 @@ class AnalysisMW(QMainWindow):
 			#corrdatadict[data[i*valuespertemp,0]] = data[i*valuespertemp:2*i*valuespertemp,1:]
 
 	def generateHeader(self, parameters, values):
-		self.clearObject(self.headerlayout)
+		self.clearLayout(self.headerlayout)
 		for i in range(len(parameters)):
 			tempParamBox = ParamBox(parameters[i], values[i])
 			self.headerlayout.addLayout(tempParamBox.layout)
 
-	def clearObject(self, object):
-		while object.count():
-			child = object.takeAt(0)
-			if child.widget():
+	def clearLayout(self, layout):
+		while layout.count():
+			child = layout.takeAt(0)
+			if child.widget() is not None:
 				child.widget().deleteLater()
+			elif child.layout() is not None:
+				self.clearLayout(child.layout())
 
 	def chooseFile(self):
 		filename = QFileDialog.getOpenFileName(self, "Open File", os.path.join(os.getcwd(), "data"))
@@ -124,19 +144,22 @@ class AnalysisMW(QMainWindow):
 				self.generateHeader(self.parameternames.tolist(), self.parametervalues.tolist())
 				self.graph.clear()
 				self.graph.setTitle(None)
+				self.graph.data=None
 				if file[:4] == "data":
 					self.variables = np.genfromtxt(filename[0], delimiter=",", skip_header=3, max_rows=1, dtype=str)
 					self.generateButtons(self.variables[1:].tolist())
+					self.mode = "data"
 					# data[:, 0]) gives temperatures
 				else:
 					sizeindex = self.parameternames.tolist().index("Lattice Size (NxN)")
 					self.valuespertemp = int(self.parametervalues[sizeindex]/2-1)
 					self.generateCorrComboBox()
+					self.mode = "corr"
 
 	def graphData(self, sender):
 		buttontext = self.sender().text()
 		self.graph.setTitle("{} vs. Temperature".format(buttontext))
-		indexofbuttoninbuttons = self.buttonlist.index(self.sender())
+		indexofbuttoninbuttons = self.buttonlist.index(buttontext)
 		indexofbuttonindata = self.variables[1:].tolist().index(buttontext)
 		coltoplot = indexofbuttonindata + 1
 		self.graph.clear()
@@ -148,15 +171,88 @@ class AnalysisMW(QMainWindow):
 
 		self.graph.setLabel("left", buttontext)
 		self.graph.setLabel("bottom", "Temperature")
+		self.graph.data = buttontext
 
 	def graphCorrData(self, index):
 		dataloc = index*self.valuespertemp
 		self.graph.setTitle("Spatial correlation vs. distance at T = {}".format(str(self.data[dataloc,0])))
 		self.graph.clear()
 		self.plot = self.graph.plot(x=self.data[dataloc:dataloc+self.valuespertemp,1], y=self.data[dataloc:dataloc+self.valuespertemp,2], pen=None, symbol="o")
+		self.graph.setLabel("left", "Spatial correlation")
+		self.graph.setLabel("bottom", "Distance")
+		self.graph.data = index
 
-#a = np.genfromtxt(os.path.join(os.getcwd(), "data\corr_20180123-034342.csv"), delimiter=",", skip_header=4)
-#print(a)
+	def getHCDivision(self, hc_data):
+		high_indices = np.argpartition(hc_data, -4)[-4:]
+		high_indices_sorted = np.sort(high_indices)
+		run = 1
+		best_run = 1
+		index_of_best_run = 0
+		start_index = 0
+		for i in range(0, len(high_indices_sorted)-1):
+			if high_indices_sorted[i]+1 in high_indices_sorted:
+				run = run + 1
+			else:
+				if best_run < run:
+					index_of_best_run = start_index
+					best_run = run
+				start_index = i + 1
+				run = 1
+		if best_run < run:
+			index_of_best_run = start_index
+			best_run = run
+		if best_run > 1:
+			print("Peak of size {} found".format(best_run))
+			peak_indices = high_indices_sorted[index_of_best_run:index_of_best_run+best_run]
+			hc_best = hc_data[peak_indices]
+			division_index = 0
+			for i in range(len(hc_best)-1):
+				if hc_best[i+1] < hc_best[i]:
+					break
+				division_index = i+1
+			return peak_indices[division_index]
+
+
+		else:
+			print("Nothing found!")
+			return None
+
+	def analyzeCurrentData(self):
+		#tc=2.269
+		if self.graph.data:
+			if self.mode == "corr":
+				pass
+			else:
+				if self.graph.data == "Heat Capacity":
+					index_of_button_in_buttons = self.buttonlist.index(self.graph.data)
+					ycol = self.variables.tolist().index(self.graph.data)
+					split_index = self.getHCDivision(self.data[:, ycol])
+					if split_index:
+						hc_data_below = self.data[:split_index, ycol]
+						hc_data_above = self.data[split_index:, ycol]
+						if self.hasstdev[index_of_button_in_buttons]:
+							below_std = self.data[:split_index, ycol+1]
+							above_std = self.data[split_index:, ycol+1]
+						else:
+							below_std = None
+							above_std = None
+						tc_guess = .5*(self.data[split_index-1, 0]+self.data[split_index,0])
+						guess_below = [tc_guess, -1.0]
+						guess_above = [tc_guess, -1.0, hc_data_above[-1]]
+						popt_below, pcov_below = scipy.optimize.curve_fit(hc_func_below, self.data[:split_index, 0], np.exp(hc_data_below), p0=guess_below, sigma=below_std, absolute_sigma=True)
+						popt_above, pcov_above = scipy.optimize.curve_fit(hc_func_above, self.data[split_index:, 0], np.exp(hc_data_above), p0=guess_above, sigma=above_std, absolute_sigma=True)
+						print("Below: {}".format(popt_below))
+						print("Above: {}".format(popt_above))
+
+						below_fitxdata = np.linspace(2*self.data[0, 0]-self.data[1,0], self.data[split_index+1, 0], num=500)
+						below_fitydata = hc_func_below(below_fitxdata, popt_below[0], popt_below[1])
+						self.below_fitplot = self.graph.plot(x=below_fitxdata, y=below_fitydata)
+
+						above_fitxdata = np.linspace(self.data[split_index,0], 2*self.data[-1, 0]-self.data[-2,0], num=500)
+						above_fitydata = hc_func_above(above_fitxdata, popt_above[0], popt_above[1], popt_above[2])
+						self.above_fitplot = self.graph.plot(x=above_fitxdata, y=above_fitydata)
+
+
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
 	bd = AnalysisMW()

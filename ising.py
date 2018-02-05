@@ -1,13 +1,14 @@
 import numpy as np
 from scipy import signal
 from annealing import B_anneal, T_anneal
+import random
 
 try:
     __IPYTHON__
 except:
     from tqdm import tqdm
 
-def run_ising(N,T,num_steps,num_burnin,flip_prop,J,B,t_anneal,anneal_boolean):
+def run_ising(N,T,num_steps,num_burnin,flip_prop,J,B,t_anneal,b_anneal,anneal_boolean,disable_tqdm=False):
 
     # Description of parameters:
     # N = Grid Size
@@ -28,7 +29,7 @@ def run_ising(N,T,num_steps,num_burnin,flip_prop,J,B,t_anneal,anneal_boolean):
     #   this matrix with the spin matrix
     conv_mat = np.matrix('0 1 0; 1 0 1; 0 1 0')
     alpha = np.exp(np.log(T/t_anneal)/num_burnin)
-    print(alpha)
+    beta = np.exp(np.log((B+.0001)/b_anneal)/num_burnin)
     # Generate a random initial configuration
     spin = np.random.choice([-1,1],(N,N))
 
@@ -36,7 +37,10 @@ def run_ising(N,T,num_steps,num_burnin,flip_prop,J,B,t_anneal,anneal_boolean):
         __IPYTHON__
         steps = range(num_steps)
     except:
-        steps = tqdm(range(num_steps))
+        if disable_tqdm:
+            steps = range(num_steps)
+        else:
+            steps = tqdm(range(num_steps))
 
     # Evolve the system
     for step in steps:
@@ -44,13 +48,16 @@ def run_ising(N,T,num_steps,num_burnin,flip_prop,J,B,t_anneal,anneal_boolean):
         try:
             __IPYTHON__
         except:
-            steps.set_description("Working on T = %.2f" % T)
-            steps.refresh() # to show immediately the update
+            if disable_tqdm:
+                pass
+            else:
+                steps.set_description("Working on T = %.2f" % T)
+                steps.refresh()  # to show immediately the update
 
         #implement annealing in annealing.py file
         if anneal_boolean:
             T_step = T_anneal(T, t_anneal, alpha, step, num_burnin)
-            B_step = B_anneal(B, step, num_steps, num_burnin)
+            B_step = B_anneal(B, b_anneal, beta, step, num_burnin)
         else:
             T_step = T
             B_step = B
@@ -75,7 +82,7 @@ def run_ising(N,T,num_steps,num_burnin,flip_prop,J,B,t_anneal,anneal_boolean):
         #If not, assign a transition probability of 1
 
         #Decide which transitions will occur
-        transitions = [[-1 if (cell>np.random.rand() and flip_prop>np.random.rand()) else 1 for cell in row] for row in p_trans]
+        transitions = [[-1 if (cell>random.random() and flip_prop>random.random()) else 1 for cell in row] for row in p_trans]
         #Perform the transitions
         spin = spin*transitions
 

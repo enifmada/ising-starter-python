@@ -8,6 +8,7 @@ import logging
 import matplotlib.pyplot as plt
 from tqdm import tqdm #fancy progress bar generator
 from ising import run_ising #import run_ising function from ising.py
+import multiprocessing as mp
 
 def calculate_and_save_values(Msamp, Esamp, spin, num_analysis, index, temp, data_filename, corr_filename):
     try:
@@ -45,76 +46,90 @@ def calculate_and_save_values(Msamp, Esamp, spin, num_analysis, index, temp, dat
 
 #simulation options (enter python main.py --help for details)
 @click.command()
-@click.option('--t_min', default=2, help='Minimum Temperature (inclusive)', type=float)
-@click.option('--t_max', default=2.5, help='Maximum Temperature (inclusive)', type=float)
-@click.option('--t_step', default=0.1, help='Temperature Step Size', type=float)
+@click.option('--t_min', default=2.22, help='Minimum Temperature (inclusive)', type=float)
+@click.option('--t_max', default=2.32001, help='Maximum Temperature (exclusive)', type=float)
+@click.option('--t_step', default=0.005, help='Temperature Step Size', type=float)
 @click.option('--t_anneal', default=20.0, help="Starting Annealing Temperature", type=float)
 @click.option("--anneal_boolean", default=True, help="Anneal or not?", type=bool)
 #anneal_boolean should always be true unless testing stuff related to annealing
 
-@click.option('--n', default=9, help='Lattice Size (NxN)',type=int)
-@click.option('--num_steps', default=20000, help='Total Number of Steps',type=int)
-@click.option('--num_analysis', default=10000, help='Number of Steps used in Analysis',type=int)
-@click.option('--num_burnin', default=500, help='Total Number of Burnin Steps',type=int)
+@click.option('--n', default=10, help='Lattice Size (NxN)',type=int)
+@click.option('--num_steps', default=18000, help='Total Number of Steps',type=int)
+@click.option('--num_analysis', default=12000, help='Number of Steps used in Analysis',type=int)
+@click.option('--num_burnin', default=5000, help='Total Number of Burnin Steps',type=int)
 
 @click.option('--j', default=1.0, help='Interaction Strength',type=float)
 @click.option('--b', default=0.0, help='Applied Magnetic Field',type=float)
+@click.option('--b_anneal', default=1.0, help="Starting Annealing Field", type=float)
 @click.option('--flip_prop', default=0.1, help='Proportion of Spins to Consider Flipping per Step',type=float)
 
 @click.option('--output', default='data', help='Directory Name for Data Output',type=str)
 @click.option('--plots', default=False, help='Turn Automatic Plot Creation Off or On',type=bool)
 
-def run_simulation(t_min,t_max,t_step,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,output,plots,t_anneal, anneal_boolean):
+@click.option('--processes', default=4, help='',type=int)
 
-    check_step_values(num_steps, num_analysis, num_burnin)
 
-    T = get_temp_array(t_min, t_max, t_step)
-
-    data_filename, corr_filename = get_filenames(output)
-
-    write_sim_parameters(data_filename,corr_filename,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,t_anneal)
-
-    if plots:
-        #initialize vars for plotting values
-        temp_arr, M_mean_arr, E_mean_arr, M_std_arr, E_std_arr = [],[],[],[],[]
-
-    print('\nSimulation Started! Data will be written to ' + data_filename + '\n')
-
-    temp_range = tqdm(T) #set fancy progress bar range
-    for index, temp in enumerate(temp_range):
-
-        #show current temperature
-        temp_range.set_description("Simulation Progress")
-
-        try:
-            #run the Ising model
-            Msamp, Esamp, spin = run_ising(n,temp,num_steps,num_burnin,flip_prop,j,b,t_anneal,anneal_boolean)
-            #plt.plot(Esamp[:20000])
-            #plt.show()
-
-            #get and save statistical values
-            if calculate_and_save_values(Msamp,Esamp,spin,num_analysis,index,temp,data_filename,corr_filename):
-
-                if plots:
-                    #for plotting
-                    M_mean, E_mean, M_std, E_std = get_plot_values(temp,Msamp,Esamp,num_analysis)
-                    temp_arr.append(temp)
-                    M_mean_arr.append(M_mean)
-                    E_mean_arr.append(E_mean)
-                    M_std_arr.append(M_std)
-                    E_std_arr.append(E_std)
-
-        except KeyboardInterrupt:
-            print("\n\nProgram Terminated. Good Bye!")
-            sys.exit()
-
-        except:
-            logging.error("Temp="+str(temp)+": Simulation Failed. No Data Written")
-
+def ising(t_min,t_max,t_step,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,output,processes):
+    length=0
+    t_move = t_min
+    while t_move < t_max:
+        length = length + 1
+        t_move = t_move + t_step
+    data_filename, corr_filename = initialize_simulation(n,num_steps,num_analysis,num_burnin,output,j,b,flip_prop,t_anneal,b_anneal,length)
+    run_processes(processes,t_min,t_max,t_step,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,data_filename,corr_filename)
     print('\n\nSimulation Finished! Data written to '+ data_filename)
 
-    if plots:
-        plot_graphs(temp_arr, M_mean_arr, E_mean_arr, M_std_arr, E_std_arr)
+def initialize_simulation(n,num_steps,num_analysis,num_burnin,output,j,b,flip_prop,t_anneal,b_anneal,length):
+    check_step_values(num_steps, num_analysis, num_burnin)
+    data_filename, corr_filename = get_filenames(output)
+    write_sim_parameters(data_filename,corr_filename,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,t_anneal,b_anneal,length)
+    print('\nSimulation Started! Data will be written to ' + data_filename + '\n')
+    return data_filename, corr_filename
+
+def run_processes(processes,t_min,t_max,t_step,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,data_filename,corr_filename):
+
+    T = get_temp_array(t_min, t_max, t_step)
+    pool = mp.Pool(processes=processes)
+    [pool.apply_async(run_simulation, args=(index,temp,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,data_filename,corr_filename,),callback = print_result) for index,temp in enumerate(T)]
+    pool.close()
+    pool.join()
+
+
+def print_result(temp):
+    print("Temp {} Done".format(temp))
+
+def run_simulation(index,temp,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,data_filename,corr_filename):
+    # if plots:
+    #     #initialize vars for plotting values
+    #     temp_arr, M_mean_arr, E_mean_arr, M_std_arr, E_std_arr = [],[],[],[],[]
+
+    try:
+        #run the Ising model
+        Msamp, Esamp, spin = run_ising(n,temp,num_steps,num_burnin,flip_prop,j,b,t_anneal,b_anneal,anneal_boolean, disable_tqdm=True)
+        #plt.plot(Esamp[:20000])
+        #plt.show()
+
+        #get and save statistical values
+        if calculate_and_save_values(Msamp,Esamp,spin,num_analysis,index,temp,data_filename,corr_filename):
+
+            if plots:
+                #for plotting
+                M_mean, E_mean, M_std, E_std = get_plot_values(temp,Msamp,Esamp,num_analysis)
+                temp_arr.append(temp)
+                M_mean_arr.append(M_mean)
+                E_mean_arr.append(E_mean)
+                M_std_arr.append(M_std)
+                E_std_arr.append(E_std)
+
+    except KeyboardInterrupt:
+        print("\n\nProgram Terminated. Good Bye!")
+        sys.exit()
+
+    except:
+        logging.error("Temp="+str(temp)+": Simulation Failed. No Data Written")
+
+    # if plots:
+    #     plot_graphs(temp_arr, M_mean_arr, E_mean_arr, M_std_arr, E_std_arr)
 
 def get_plot_values(temp,Msamp,Esamp,num_analysis): #only for plotting at end
     try:
@@ -157,19 +172,19 @@ def get_filenames(dirname): #make data folder if doesn't exist, then specify fil
     except:
         raise ValueError('Directory name not valid. Exiting simulation.')
 
-def write_sim_parameters(data_filename,corr_filename,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,t_anneal):
+def write_sim_parameters(data_filename,corr_filename,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,t_anneal,b_anneal,length):
     try:
         with open(data_filename,'w') as csv_file:
             writer = csv.writer(csv_file, delimiter=',', lineterminator='\n')
             #Write simulations parameters to CSV file
-            writer.writerow(['Lattice Size (NxN)','Total Steps','Steps Used in Analysis','Burnin Steps','Interaction Strength','Applied Mag Field','Spin Prop', "Starting Anneal Temp"])
-            writer.writerow([n,num_steps,num_analysis,num_burnin,j,b,flip_prop,t_anneal])
+            writer.writerow(['Lattice Size (NxN)','Total Steps/Temp','Steps/Temp Used in Analysis','Burnin Steps','Interaction Strength','Applied Mag Field','Spin Prop', "Starting Anneal Temp", "Starting Anneal Field", "Number of Temps"])
+            writer.writerow([n,num_steps,num_analysis,num_burnin,j,b,flip_prop,t_anneal,b_anneal,length])
             writer.writerow([])
         with open(corr_filename,'w') as csv_file:
             writer = csv.writer(csv_file, delimiter=',', lineterminator='\n')
             #Write simulations parameters to CSV file
-            writer.writerow(['Lattice Size (NxN)','Total Steps','Steps Used in Analysis','Burnin Steps','Interaction Strength','Applied Mag Field','Spin Prop', "Starting Anneal Temp"])
-            writer.writerow([n,num_steps,num_analysis,num_burnin,j,b,flip_prop,t_anneal])
+            writer.writerow(['Lattice Size (NxN)','Total Steps','Steps Used in Analysis','Burnin Steps','Interaction Strength','Applied Mag Field','Spin Prop', "Starting Anneal Temp", "Starting Anneal Field", "Number of Temps"])
+            writer.writerow([n,num_steps,num_analysis,num_burnin,j,b,flip_prop,t_anneal,b_anneal, length])
             writer.writerow([])
     except:
         logging.error('Could not save simulation parameters. Exiting simulation')
@@ -214,4 +229,4 @@ def append_data_to_file(filename,data_array,temp=False):
 
 if __name__ == "__main__":
     print("\n2D Ising Model Simulation\n")
-    run_simulation()
+    ising()
