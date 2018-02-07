@@ -19,11 +19,21 @@ def calculate_and_save_values(Msamp, Esamp, spin, num_analysis, index, temp, dat
         Esamp_analysis_sq = np.square(Esamp_analysis)
         M_mean = np.average(Msamp_analysis)
         E_mean = np.average(Esamp_analysis)
+        c_v_std_array = []
         c_v = 1.0/temp*(np.average(Esamp_analysis_sq)-E_mean**2)
+        chi_std_array = []
         chi = np.average(Msamp_analysis_sq)-M_mean**2
+        chunksize = int(num_analysis/20)
+        for i in range(0,20):
+            c_v_temp = 1.0/temp * (np.average(Esamp_analysis_sq[i*chunksize:(i+1)*chunksize])-np.square(np.average(Esamp_analysis[i*chunksize:(i+1)*chunksize])))
+            chi_temp = np.average(Msamp_analysis_sq[i*chunksize:(i+1)*chunksize])-np.square(np.average(Msamp_analysis[i*chunksize:(i+1)*chunksize]))
+            c_v_std_array.append(c_v_temp)
+            chi_std_array.append(chi_temp)
+        c_v_std = np.std(c_v_std_array)
+        chi_std = np.std(chi_std_array)
         M_std = np.std(Msamp_analysis)
         E_std = np.std(Esamp_analysis)
-        data_array = [M_mean,M_std,E_mean,E_std,c_v,chi]
+        data_array = [M_mean,M_std,E_mean,E_std,c_v,c_v_std,chi,chi_std]
 
         #write data to CSV file
         #header_array = ['Temperature','Magnetization Mean','Magnetization Std Dev','Energy Mean','Energy Std Dev',"Heat Capacity","Susceptibility"]
@@ -85,7 +95,7 @@ def initialize_simulation(n,num_steps,num_analysis,num_burnin,output,j,b,flip_pr
     write_sim_parameters(data_filename,corr_filename,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,t_anneal,b_anneal,length)
     print('\nSimulation Started! Data will be written to ' + data_filename + '\n')
     header_array = ['Temperature', 'Magnetization Mean', 'Magnetization Std Dev', 'Energy Mean', 'Energy Std Dev',
-                    "Heat Capacity", "Susceptibility"]
+                    "Heat Capacity", "Heat Capacity Std Dev", "Susceptibility", "Susceptibility Std Dev"]
     append_data_to_file(data_filename, header_array)
     header_array = ['Temperature', 'K', 'Spatial Spin Correlation']
     append_data_to_file(corr_filename, header_array)
