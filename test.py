@@ -1,5 +1,6 @@
 #import pyqtgraph.examples
 #pyqtgraph.examples.run()
+import numpy as np
 
-a = "string"
-print(a[:3])
+a = np.arange(2.22, 2.320001,.0005).tolist()
+print(a)

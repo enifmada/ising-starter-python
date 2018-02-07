@@ -10,12 +10,12 @@ pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
 
 
-def hc_func_below(x, tc, alpha):
-	return np.power(((tc - x) / tc), alpha)
+def hc_func_below(x, tc, alpha, const):
+	return alpha * np.log((tc-x)/tc) + const
 
 
 def hc_func_above(x, tc, beta, const):
-	return np.exp(const)*np.power(((x - tc) / tc), beta)
+	return beta * np.log((x-tc)/tc) + const
 
 class ParamBox(QWidget):
 	def __init__(self, parameter, value):
@@ -237,18 +237,21 @@ class AnalysisMW(QMainWindow):
 							below_std = None
 							above_std = None
 						tc_guess = .5*(self.data[split_index-1, 0]+self.data[split_index,0])
-						guess_below = [tc_guess, -1.0]
+						guess_below = [tc_guess, -1.0, 0]
 						guess_above = [tc_guess, -1.0, hc_data_above[-1]]
-						popt_below, pcov_below = scipy.optimize.curve_fit(hc_func_below, self.data[:split_index, 0], np.exp(hc_data_below), p0=guess_below, sigma=below_std, absolute_sigma=True)
-						popt_above, pcov_above = scipy.optimize.curve_fit(hc_func_above, self.data[split_index:, 0], np.exp(hc_data_above), p0=guess_above, sigma=above_std, absolute_sigma=True)
-						print("Below: {}".format(popt_below))
-						print("Above: {}".format(popt_above))
+						popt_below, pcov_below = scipy.optimize.curve_fit(hc_func_below, self.data[:split_index, 0], hc_data_below, p0=guess_below, sigma=below_std, absolute_sigma=False)
+						popt_above, pcov_above = scipy.optimize.curve_fit(hc_func_above, self.data[split_index:, 0], hc_data_above, p0=guess_above, sigma=above_std, absolute_sigma=False)
+						print("Function below: {0:0.3g} * log ({1:0.3f}-T)/{1:0.3f} + {2:0.3g}".format(popt_below[1], popt_below[0],popt_below[2]))
+						print("Tc = {0:0.3f} ± {1:0.3f}".format(popt_below[0], np.sqrt(pcov_below[0,0])))
+						print("Function above: {0:0.3g} * log (T-{1:0.3f})/{1:0.3f} + {2:0.3g}".format(popt_above[1],popt_above[0],popt_above[2]))
+						print("Tc = {0:0.3f} ± {1:0.3f}".format(popt_above[0], np.sqrt(pcov_above[0, 0])))
 
-						below_fitxdata = np.linspace(2*self.data[0, 0]-self.data[1,0], self.data[split_index+1, 0], num=500)
-						below_fitydata = hc_func_below(below_fitxdata, popt_below[0], popt_below[1])
+						spacing = self.data[1,0]-self.data[0,0]
+						below_fitxdata = np.linspace(self.data[0,0]-spacing, self.data[split_index+1,0], num=500)
+						below_fitydata = hc_func_below(below_fitxdata, popt_below[0], popt_below[1], popt_below[2])
 						self.below_fitplot = self.graph.plot(x=below_fitxdata, y=below_fitydata)
 
-						above_fitxdata = np.linspace(self.data[split_index,0], 2*self.data[-1, 0]-self.data[-2,0], num=500)
+						above_fitxdata = np.linspace(self.data[split_index,0]-spacing/2, self.data[-1,0]+spacing, num=500)
 						above_fitydata = hc_func_above(above_fitxdata, popt_above[0], popt_above[1], popt_above[2])
 						self.above_fitplot = self.graph.plot(x=above_fitxdata, y=above_fitydata)
 

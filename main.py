@@ -26,16 +26,16 @@ def calculate_and_save_values(Msamp, Esamp, spin, num_analysis, index, temp, dat
         data_array = [M_mean,M_std,E_mean,E_std,c_v,chi]
 
         #write data to CSV file
-        header_array = ['Temperature','Magnetization Mean','Magnetization Std Dev','Energy Mean','Energy Std Dev',"Heat Capacity","Susceptibility"]
-        append_data_to_file(data_filename, header_array) if index == 0 else None
+        #header_array = ['Temperature','Magnetization Mean','Magnetization Std Dev','Energy Mean','Energy Std Dev',"Heat Capacity","Susceptibility"]
+        #append_data_to_file(data_filename, header_array) if index == 0 else None
         append_data_to_file(data_filename, data_array, temp)
 
         #get correlation function
         corr = compute_autocorrelation(spin)
 
         #write correlation function to CSV file
-        header_array = ['Temperature','K','Spatial Spin Correlation']
-        append_data_to_file(corr_filename, header_array) if index == 0 else None
+        #header_array = ['Temperature','K','Spatial Spin Correlation']
+        #append_data_to_file(corr_filename, header_array) if index == 0 else None
         [append_data_to_file(corr_filename, corr_value, temp) for corr_value in corr]
 
         return True
@@ -84,6 +84,11 @@ def initialize_simulation(n,num_steps,num_analysis,num_burnin,output,j,b,flip_pr
     data_filename, corr_filename = get_filenames(output)
     write_sim_parameters(data_filename,corr_filename,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,t_anneal,b_anneal,length)
     print('\nSimulation Started! Data will be written to ' + data_filename + '\n')
+    header_array = ['Temperature', 'Magnetization Mean', 'Magnetization Std Dev', 'Energy Mean', 'Energy Std Dev',
+                    "Heat Capacity", "Susceptibility"]
+    append_data_to_file(data_filename, header_array)
+    header_array = ['Temperature', 'K', 'Spatial Spin Correlation']
+    append_data_to_file(corr_filename, header_array)
     return data_filename, corr_filename
 
 def run_processes(processes,t_min,t_max,t_step,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,data_filename,corr_filename):
@@ -120,6 +125,7 @@ def run_simulation(index,temp,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,
                 E_mean_arr.append(E_mean)
                 M_std_arr.append(M_std)
                 E_std_arr.append(E_std)
+            return temp
 
     except KeyboardInterrupt:
         print("\n\nProgram Terminated. Good Bye!")
