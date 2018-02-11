@@ -145,19 +145,21 @@ class AnalysisMW(QMainWindow):
 			else:
 				self.parameternames = np.genfromtxt(filename[0], delimiter=",", max_rows=1, dtype=str)
 				self.parametervalues = np.genfromtxt(filename[0], delimiter=",", skip_header=1, max_rows=1)
-				self.data = np.genfromtxt(filename[0], delimiter=",", skip_header=3)
+				self.data = np.genfromtxt(filename[0], delimiter=",", skip_header=4)
 				self.generateHeader(self.parameternames.tolist(), self.parametervalues.tolist())
 				self.graph.clear()
 				self.graph.setTitle(None)
 				self.graph.data=None
 				if file[:4] == "data":
-					self.variables = np.genfromtxt(filename[0], delimiter=",", skip_header=2, max_rows=1, dtype=str)
+					self.variables = np.genfromtxt(filename[0], delimiter=",", skip_header=3, max_rows=1, dtype=str)
+					self.data = np.sort(self.data, axis=0)
 					self.generateButtons(self.variables[1:].tolist())
 					self.mode = "data"
 					# data[:, 0]) gives temperatures
 				else:
 					sizeindex = self.parameternames.tolist().index("Lattice Size (NxN)")
 					self.valuespertemp = int(self.parametervalues[sizeindex]/2-1)
+					print(self.valuespertemp)
 					self.generateCorrComboBox()
 					self.mode = "corr"
 

@@ -10,49 +10,27 @@ from tqdm import tqdm #fancy progress bar generator
 from ising import run_ising #import run_ising function from ising.py
 import multiprocessing as mp
 
-def calculate_and_save_values(Msamp, Esamp, spin, num_analysis, index, temp, data_filename, corr_filename):
-    try:
-        #calculate statistical values
-        Msamp_analysis = Msamp[-num_analysis:]
-        Esamp_analysis = Esamp[-num_analysis:]
-        Msamp_analysis_sq = np.square(Msamp_analysis)
-        Esamp_analysis_sq = np.square(Esamp_analysis)
-        M_mean = np.average(Msamp_analysis)
-        E_mean = np.average(Esamp_analysis)
-        c_v_std_array = []
-        c_v = 1.0/temp*(np.average(Esamp_analysis_sq)-E_mean**2)
-        chi_std_array = []
-        chi = np.average(Msamp_analysis_sq)-M_mean**2
-        chunksize = int(num_analysis/20)
-        for i in range(0,20):
-            c_v_temp = 1.0/temp * (np.average(Esamp_analysis_sq[i*chunksize:(i+1)*chunksize])-np.square(np.average(Esamp_analysis[i*chunksize:(i+1)*chunksize])))
-            chi_temp = np.average(Msamp_analysis_sq[i*chunksize:(i+1)*chunksize])-np.square(np.average(Msamp_analysis[i*chunksize:(i+1)*chunksize]))
-            c_v_std_array.append(c_v_temp)
-            chi_std_array.append(chi_temp)
-        c_v_std = np.std(c_v_std_array)
-        chi_std = np.std(chi_std_array)
-        M_std = np.std(Msamp_analysis)
-        E_std = np.std(Esamp_analysis)
-        data_array = [M_mean,M_std,E_mean,E_std,c_v,c_v_std,chi,chi_std]
-
-        #write data to CSV file
-        #header_array = ['Temperature','Magnetization Mean','Magnetization Std Dev','Energy Mean','Energy Std Dev',"Heat Capacity","Susceptibility"]
-        #append_data_to_file(data_filename, header_array) if index == 0 else None
-        append_data_to_file(data_filename, data_array, temp)
-
-        #get correlation function
-        corr = compute_autocorrelation(spin)
-
-        #write correlation function to CSV file
-        #header_array = ['Temperature','K','Spatial Spin Correlation']
-        #append_data_to_file(corr_filename, header_array) if index == 0 else None
-        [append_data_to_file(corr_filename, corr_value, temp) for corr_value in corr]
-
-        return True
-
-    except:
-        logging.error("Temp=" + str(temp) + ": Statistical Calculation Failed. No Data Written.")
-        sys.exit()
+# #def calculate_and_save_values(Msamp, Esamp, spin, num_analysis, index, temp, data_filename, corr_filename):
+#
+#
+#         #write data to CSV file
+#         #header_array = ['Temperature','Magnetization Mean','Magnetization Std Dev','Energy Mean','Energy Std Dev',"Heat Capacity","Susceptibility"]
+#         #append_data_to_file(data_filename, header_array) if index == 0 else None
+#         append_data_to_file(data_filename, data_array, temp)
+#
+#         #get correlation function
+#         corr = compute_autocorrelation(spin)
+#
+#         #write correlation function to CSV file
+#         #header_array = ['Temperature','K','Spatial Spin Correlation']
+#         #append_data_to_file(corr_filename, header_array) if index == 0 else None
+#         [append_data_to_file(corr_filename, corr_value, temp) for corr_value in corr]
+#
+#         return True
+#
+#     except:
+#         #logging.error("Temp=" + str(temp) + ": Statistical Calculation Failed. No Data Written.")
+#         sys.exit()
 
 #simulation options (enter python main.py --help for details)
 @click.command()
@@ -63,9 +41,9 @@ def calculate_and_save_values(Msamp, Esamp, spin, num_analysis, index, temp, dat
 @click.option("--anneal_boolean", default=True, help="Anneal or not?", type=bool)
 #anneal_boolean should always be true unless testing stuff related to annealing
 
-@click.option('--n', default=10, help='Lattice Size (NxN)',type=int)
-@click.option('--num_steps', default=18000, help='Total Number of Steps',type=int)
-@click.option('--num_analysis', default=12000, help='Number of Steps used in Analysis',type=int)
+@click.option('--n', default=15, help='Lattice Size (NxN)',type=int)
+@click.option('--num_steps', default=25000, help='Total Number of Steps',type=int)
+@click.option('--num_analysis', default=19000, help='Number of Steps used in Analysis',type=int)
 @click.option('--num_burnin', default=5000, help='Total Number of Burnin Steps',type=int)
 
 @click.option('--j', default=1.0, help='Interaction Strength',type=float)
@@ -89,6 +67,7 @@ def ising(t_min,t_max,t_step,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,p
     run_processes(processes,t_min,t_max,t_step,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,data_filename,corr_filename)
     print('\n\nSimulation Finished! Data written to '+ data_filename)
 
+
 def initialize_simulation(n,num_steps,num_analysis,num_burnin,output,j,b,flip_prop,t_anneal,b_anneal,length):
     check_step_values(num_steps, num_analysis, num_burnin)
     data_filename, corr_filename = get_filenames(output)
@@ -101,48 +80,99 @@ def initialize_simulation(n,num_steps,num_analysis,num_burnin,output,j,b,flip_pr
     append_data_to_file(corr_filename, header_array)
     return data_filename, corr_filename
 
-def run_processes(processes,t_min,t_max,t_step,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,data_filename,corr_filename):
 
+def run_processes(processes, t_min, t_max, t_step, n, num_steps,num_analysis,num_burnin, j, b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,data_filename, corr_filename):
     T = get_temp_array(t_min, t_max, t_step)
-    pool = mp.Pool(processes=processes)
-    [pool.apply_async(run_simulation, args=(index,temp,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,data_filename,corr_filename,),callback = print_result) for index,temp in enumerate(T)]
+
+    # must use Manager queue here, or will not work
+    manager = mp.Manager()
+    data_listener = manager.Queue()
+    corr_listener = manager.Queue()
+    pool = mp.Pool(mp.cpu_count() + 2)
+
+    # put listener to work first
+    data_watcher = pool.apply_async(listener, args=(data_listener, data_filename,))
+    corr_watcher = pool.apply_async(listener, args=(corr_listener, corr_filename,))
+
+    # fire off workers
+    jobs = [pool.apply_async(run_simulation, args=(index, temp, n, num_steps,num_analysis,num_burnin,j, b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean, data_filename, corr_filename, data_listener,corr_listener,)) for index, temp in enumerate(T)]
+
+    # collect results from the workers through the pool result queue
+    [job.get() for job in jobs]
+
+    # now we are done, kill the listener
+    data_listener.put('kill')
+    corr_listener.put('kill')
     pool.close()
-    pool.join()
 
-
-def print_result(temp):
-    print("Temp {} Done".format(temp))
-
-def run_simulation(index,temp,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,data_filename,corr_filename):
+def run_simulation(index,temp,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,plots,t_anneal,b_anneal,anneal_boolean,data_filename,corr_filename,data_listener,corr_listener):
     # if plots:
     #     #initialize vars for plotting values
     #     temp_arr, M_mean_arr, E_mean_arr, M_std_arr, E_std_arr = [],[],[],[],[]
-
+    print("Working on temp {}".format(temp))
     try:
         #run the Ising model
-        Msamp, Esamp, spin = run_ising(n,temp,num_steps,num_burnin,flip_prop,j,b,t_anneal,b_anneal,anneal_boolean, disable_tqdm=True)
+        Msamp, Esamp, spin = run_ising(n,temp,num_steps,num_burnin,flip_prop,j,b,t_anneal,b_anneal,anneal_boolean,disable_tqdm=True)
         #plt.plot(Esamp[:20000])
         #plt.show()
+        try:
+            # calculate statistical values
+            Msamp_analysis = Msamp[-num_analysis:]
+            Esamp_analysis = Esamp[-num_analysis:]
+            Msamp_analysis_sq = np.square(Msamp_analysis)
+            Esamp_analysis_sq = np.square(Esamp_analysis)
+            M_mean = np.average(Msamp_analysis)
+            E_mean = np.average(Esamp_analysis)
+            c_v_std_array = []
+            c_v = 1.0 / temp * (np.average(Esamp_analysis_sq) - E_mean ** 2)
+            chi_std_array = []
+            chi = np.average(Msamp_analysis_sq) - M_mean ** 2
+            chunksize = int(num_analysis / 20)
+            for i in range(0, 20):
+                c_v_temp = 1.0 / temp * (np.average(Esamp_analysis_sq[i * chunksize:(i + 1) * chunksize]) - np.square(
+                    np.average(Esamp_analysis[i * chunksize:(i + 1) * chunksize])))
+                chi_temp = np.average(Msamp_analysis_sq[i * chunksize:(i + 1) * chunksize]) - np.square(
+                    np.average(Msamp_analysis[i * chunksize:(i + 1) * chunksize]))
+                c_v_std_array.append(c_v_temp)
+                chi_std_array.append(chi_temp)
+            c_v_std = np.std(c_v_std_array)
+            chi_std = np.std(chi_std_array)
+            M_std = np.std(Msamp_analysis)
+            E_std = np.std(Esamp_analysis)
+            data_array = [M_mean, M_std, E_mean, E_std, c_v, c_v_std, chi, chi_std]
+            data_listener.put([temp] + data_array)
 
-        #get and save statistical values
-        if calculate_and_save_values(Msamp,Esamp,spin,num_analysis,index,temp,data_filename,corr_filename):
+            corr = compute_autocorrelation(spin)
+            [corr_listener.put([temp] + corr_value) for corr_value in corr]
 
-            if plots:
-                #for plotting
-                M_mean, E_mean, M_std, E_std = get_plot_values(temp,Msamp,Esamp,num_analysis)
-                temp_arr.append(temp)
-                M_mean_arr.append(M_mean)
-                E_mean_arr.append(E_mean)
-                M_std_arr.append(M_std)
-                E_std_arr.append(E_std)
-            return temp
+            return True
+        except:
+            logging.error("Temp=" + str(temp) + ": Statistical Calculation Failed. No Data Written.")
+            return False
 
     except KeyboardInterrupt:
         print("\n\nProgram Terminated. Good Bye!")
+        data_listener.put('kill')
+        corr_listener.put('kill')
         sys.exit()
 
     except:
-        logging.error("Temp="+str(temp)+": Simulation Failed. No Data Written")
+        logging.error("Temp=" + str(temp) + ": Simulation Failed. No Data Written")
+
+
+
+        #get and save statistical values
+        # if calculate_and_save_values(Msamp,Esamp,spin,num_analysis,index,temp,data_filename,corr_filename):
+        #
+        #     if plots:
+        #         #for plotting
+        #         M_mean, E_mean, M_std, E_std = get_plot_values(temp,Msamp,Esamp,num_analysis)
+        #         temp_arr.append(temp)
+        #         M_mean_arr.append(M_mean)
+        #         E_mean_arr.append(E_mean)
+        #         M_std_arr.append(M_std)
+        #         E_std_arr.append(E_std)
+        #     return temp
 
     # if plots:
     #     plot_graphs(temp_arr, M_mean_arr, E_mean_arr, M_std_arr, E_std_arr)
@@ -230,6 +260,18 @@ def compute_autocorrelation(spin):
         corr = (r_col.mean() + r_row.mean())/2.0
         corr_array.append([k,corr])
     return corr_array
+
+def listener(q, fn):
+    '''listens for messages on the q, writes to file. '''
+    f = open(fn, 'a')
+    writer = csv.writer(f, delimiter=',', lineterminator='\n')
+    while 1:
+        m = q.get()
+        if m == 'kill':
+            break
+        writer.writerow(m)
+        f.flush()
+    f.close()
 
 def append_data_to_file(filename,data_array,temp=False):
     try:
