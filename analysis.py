@@ -17,9 +17,14 @@ def hc_func_below(x, tc, alpha, const):
 def hc_func_above(x, tc, beta, const):
 	return beta * np.log((x-tc)/tc) + const
 
-def mag_func_below(x, tc, alpha, beta):
-	return np.log(alpha) + beta * np.log((tc-x)/tc)
+def mag_func_below(x, tc, a, beta):
+	return a + beta * np.log((tc-x)/tc)
 
+def sus_func_below(x, tc, a, gamma):
+	return a + gamma * np.log((tc-x)/tc)
+
+def sus_func_above(x, tc, b, gamma):
+	return b + gamma * np.log((x-tc)/tc)
 
 
 class ParamBox(QWidget):
@@ -152,12 +157,13 @@ class AnalysisMW(QMainWindow):
 				self.graph.data=None
 				if file[:4] == "data":
 					self.variables = np.genfromtxt(filename[0], delimiter=",", skip_header=3, max_rows=1, dtype=str)
-					self.data = np.sort(self.data, axis=0)
+					self.data = self.data[np.argsort(self.data[:,0])]
 					self.generateButtons(self.variables[1:].tolist())
 					self.mode = "data"
 					# data[:, 0]) gives temperatures
 				else:
 					sizeindex = self.parameternames.tolist().index("Lattice Size (NxN)")
+					self.data = self.data[np.lexsort((self.data[:,1],self.data[:,0]))]
 					self.valuespertemp = int(self.parametervalues[sizeindex]/2-1)
 					print(self.valuespertemp)
 					self.generateCorrComboBox()
@@ -170,12 +176,16 @@ class AnalysisMW(QMainWindow):
 		indexofbuttonindata = self.variables[1:].tolist().index(buttontext)
 		coltoplot = indexofbuttonindata + 1
 		self.graph.clear()
-		self.plot = self.graph.plot(x=self.data[:, 0], y=self.data[:, coltoplot], pen=None, symbol="o")
+		if buttontext == "Magnetization Mean":
+			ydata = np.abs(self.data[:, coltoplot])
+		else:
+			ydata = self.data[:, coltoplot]
+		self.plot = self.graph.plot(x=self.data[:, 0], y=ydata, pen=None, symbol="o")
+
 		if self.hasstdev[indexofbuttoninbuttons]:
 			beamwidth = (self.data[1,0]-self.data[0,0])/2
-			bars = pg.ErrorBarItem(x=self.data[:,0], y=self.data[:, coltoplot], height = self.data[:, coltoplot+1], left=None, right=None, beam=beamwidth, pen={'color':'b', 'width':1})
-			self.graph.addItem(bars)
-
+			self.bars = pg.ErrorBarItem(x=self.data[:,0], y=ydata, height = self.data[:, coltoplot+1], left=None, right=None, beam=beamwidth, pen={'color':'b', 'width':1})
+			self.graph.addItem(self.bars)
 		self.graph.setLabel("left", buttontext)
 		self.graph.setLabel("bottom", "Temperature")
 		self.graph.data = buttontext
@@ -224,6 +234,15 @@ class AnalysisMW(QMainWindow):
 			print("Nothing found!")
 			return None
 
+	def getMagDivision(self, mag_data):
+		index = 0
+		for i in range(0, len(mag_data)):
+			index = i
+			if mag_data[i] < .1:
+				break
+
+		return index
+
 	def analyzeCurrentData(self):
 		#tc=2.269
 		if self.graph.data:
@@ -261,6 +280,36 @@ class AnalysisMW(QMainWindow):
 						above_fitxdata = np.linspace(self.data[split_index,0]-spacing/2, self.data[-1,0]+spacing, num=500)
 						above_fitydata = hc_func_above(above_fitxdata, popt_above[0], popt_above[1], popt_above[2])
 						self.above_fitplot = self.graph.plot(x=above_fitxdata, y=above_fitydata)
+				if self.graph.data == "Magnetization Mean":
+					index_of_button_in_buttons = self.buttonlist.index(self.graph.data)
+					ycol = self.variables.tolist().index(self.graph.data)
+					split_index = self.getMagDivision(np.abs(self.data[:, ycol]))
+					if split_index:
+						mag_data = np.abs(self.data[:split_index, ycol])
+						if self.hasstdev[index_of_button_in_buttons]:
+							below_std = self.data[:split_index, ycol + 1]
+						else:
+							below_std = None
+						tc_guess = .5 * (self.data[split_index - 1, 0] + self.data[split_index, 0])
+						guess_below = [tc_guess, 1.0, .125]
+						popt_below, pcov_below = scipy.optimize.curve_fit(mag_func_below, self.data[:split_index, 0], np.log(mag_data), p0=guess_below, sigma=below_std, absolute_sigma=False)
+						print("Function below: log(|M|) = {0:0.3g} +  {2:0.3g} * log ({1:0.3f}-T)/{1:0.3f}".format(popt_below[1], popt_below[0], popt_below[2]))
+						print("Tc = {0:0.3f} ± {1:0.3f}".format(popt_below[0], np.sqrt(pcov_below[0, 0])))
+						print("beta = {0:0.3f} ± {1:0.3f}".format(popt_below[2], np.sqrt(pcov_below[2, 2])))
+						tc_real = popt_below[0]
+
+						spacing = self.data[1, 0] - self.data[0, 0]
+						below_fitxdata = np.linspace(self.data[0, 0] - spacing, self.data[split_index, 0]-spacing, num=500)
+						below_fitydata = np.exp(mag_func_below(below_fitxdata, popt_below[0], popt_below[1], popt_below[2]))
+						self.graph.clear()
+						self.below_fitplot = self.graph.plot(x=np.log((tc_real-below_fitxdata)/tc_real), y=np.log(below_fitydata))
+						self.plot = self.graph.plot(x=np.log((tc_real-self.data[:split_index, 0])/tc_real), y=np.log(mag_data), pen=None, symbol="o")
+						self.bars = pg.ErrorBarItem(x=np.log((tc_real-self.data[:split_index, 0])/tc_real), y=np.log(mag_data), height=np.divide(below_std, mag_data),left=None, right=None, beam=spacing/2,pen={'color': 'b', 'width': 1})
+						self.graph.addItem(self.bars)
+						self.graph.setTitle("log(Magnetization Mean) vs. log((Tc-T)/T))")
+						self.graph.setLabel("left", "log(Magnetization Mean)")
+						self.graph.setLabel("bottom", "log((Tc-T)/T))")
+
 
 
 if __name__ == '__main__':

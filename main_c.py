@@ -7,8 +7,9 @@ import numpy as np
 import logging
 import matplotlib.pyplot as plt
 from tqdm import tqdm #fancy progress bar generator
-from ising import run_ising #import run_ising function from ising.py
+from ising_c import run_ising #import run_ising function from ising.py
 import multiprocessing as mp
+from IsingLattice import IsingLattice
 
 # #def calculate_and_save_values(Msamp, Esamp, spin, num_analysis, index, temp, data_filename, corr_filename):
 #
@@ -112,7 +113,9 @@ def run_simulation(index,temp,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,
     print("Working on temp {}".format(temp))
     try:
         #run the Ising model
-        Msamp, Esamp, spin = run_ising(n,temp,num_steps,num_burnin,flip_prop,j,b,t_anneal,b_anneal,anneal_boolean,disable_tqdm=True)
+        lattice = IsingLattice(n, flip_prop)
+
+        Msamp, Esamp = run_ising(lattice,temp,num_steps,num_burnin,j,b,t_anneal,b_anneal,anneal_boolean,disable_tqdm=True)
         #plt.plot(Esamp[:20000])
         #plt.show()
         try:
@@ -142,7 +145,7 @@ def run_simulation(index,temp,n,num_steps,num_analysis,num_burnin,j,b,flip_prop,
             data_array = [M_mean, M_std, E_mean, E_std, c_v, c_v_std, chi, chi_std]
             data_listener.put([temp] + data_array)
 
-            corr = compute_autocorrelation(spin)
+            corr = lattice.calc_auto_correlation()
             [corr_listener.put([temp] + corr_value) for corr_value in corr]
 
             return True
